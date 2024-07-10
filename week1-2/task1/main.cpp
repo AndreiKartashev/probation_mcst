@@ -65,7 +65,6 @@ int main(int argc, char *argv[])
         } 
     } 
     
-    std::vector<std::vector<int>> matrix(k, std::vector <int>(0, 0));
 
     // Создание порожденных процессов 
     for (int i = 0; i < k; i++) 
@@ -79,7 +78,7 @@ int main(int argc, char *argv[])
         else if (pid == 0) 
         { 
             // Дочерний процесс 
-            close(pipefds[i][0]); // Закрываем неиспользуемый конец канала 
+            close(pipefds[i][0]); // Закрываем чтение
 
             srand(time(0));
 
@@ -107,68 +106,66 @@ int main(int argc, char *argv[])
 
             }
 
-            close(pipefds[i][1]); // Закрываем конец канала
+            close(pipefds[i][1]); // Закрываем конец канала записи
+
             return 0; 
         } 
         else 
         { // Главный процесс 
 
             close(pipefds[i][1]); // Закрываем неиспользуемый конец канала 
-            // Настройка структуры pollfd для использования poll 
+
             fds[i].fd = pipefds[i][0]; 
             fds[i].events = POLLIN;
 
         } 
     } 
  
-
-
- //ожидание всех дочерних процессов    
-    for (int i = 0; i < k; i++)
-    {   
-        int status;
-        waitpid(-1, &status, 0);
-            
-    }
     
     std::vector<double> answer;
 
     // Использование poll для ожидания данных от порожденных процессов 
-    for (int n = 0; n < k;) 
+    int active = k;
+    while (active > 0)
     {
-        int ret = poll(fds, k, -1); 
+        int ret = poll(fds, k, -1);
+
         if (ret == -1) 
         { 
-            perror("poll"); 
+            std::cout << "poll";
             return 1; 
         }
         
-            for (int i = 0; i < k; i++) 
+        
+        for (int i = 0; i < k; i++) 
+        {
+
+            if (fds[i].revents & POLLIN)
             { 
-                
-                if ((fds[i].revents & POLLIN) || (fds[i].revents & POLLHUP))
-                { 
-                    std::cout << "p = ";
-                    int p;
-                    read(pipefds[i][0], &p, sizeof(p));
-                    std::cout << p << std::endl;
+                std::cout << "p = ";
+                int p;
+                read(pipefds[i][0], &p, sizeof(p));
+                std::cout << p << std::endl;
 
-                    long double buf;
-                    for (int j = 1; j <= p; j++)
-                    {
-                        read(pipefds[i][0], &buf, sizeof(buf));
+                long double buf;
+                for (int j = 1; j <= p; j++)
+                {
+                    read(pipefds[i][0], &buf, sizeof(buf));
 
-                        std::cout << buf << ' ';
-                        answer.push_back(buf);
-                    }
-                    std::cout << '\n'; 
+                    std::cout << buf << ' ';
+                    answer.push_back(buf);
+                }
+                std::cout << '\n'; 
+            }  
 
-                    close(pipefds[i][0]);
-                    n++;
-                } 
-            } 
+            if (fds[i].revents & POLLHUP)
+            {
+                close(pipefds[i][0]);
+                active--;
+            }
+        }
     }
-
+    
 
     std::cout << '\n';
 
